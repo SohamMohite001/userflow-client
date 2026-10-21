@@ -1,4 +1,9 @@
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/+$/, '');
+// Resolve API Base URL and ensure it ends with '/api' without duplicate trailing slashes
+let rawBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').trim().replace(/\/+$/, '');
+if (!rawBaseUrl.endsWith('/api')) {
+  rawBaseUrl = `${rawBaseUrl}/api`;
+}
+const API_BASE_URL = rawBaseUrl;
 
 // Session Storage Keys
 const TOKEN_KEY = 'userflow_jwt_token';
@@ -58,7 +63,10 @@ async function request(endpoint, options = {}) {
   try {
     response = await fetch(url, config);
   } catch (networkError) {
-    throw new Error('Unable to connect to the server. Please check your network connection.');
+    console.error(`[API Network Error] Failed to reach: ${url}`, networkError);
+    throw new Error(
+      `Unable to connect to the server at ${url}. Please verify your backend is running and network connection is active.`
+    );
   }
 
   // Handle 401 Unauthorized: Session is invalid or expired
@@ -83,7 +91,14 @@ async function request(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    const errorMessage = data?.message || `Request failed with status ${response.status}`;
+    let errorMessage = data?.message;
+    if (!errorMessage) {
+      if (response.status === 404) {
+        errorMessage = `Endpoint not found (404). Target: ${url}. Verify VITE_API_URL in Netlify environment variables and redeploy with clear cache.`;
+      } else {
+        errorMessage = `Request failed with status ${response.status}`;
+      }
+    }
     const error = new Error(errorMessage);
     error.status = response.status;
     error.data = data;
